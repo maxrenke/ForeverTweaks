@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: ForeverTweaks
+## Notes: Personal tweaks for WoW Forever: vanilla quest automation, macros, minimap icons, HUD and party frame layout, one-time addon setup.
+## Version: 1.0.0
+## Author: maxrenke
+## SavedVariables: ForeverTweaksDB
+
+VanillaIDs.lua
+ForeverTweaks.lua
