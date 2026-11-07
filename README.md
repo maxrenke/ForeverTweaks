@@ -80,10 +80,20 @@ A one-time login step (`ForeverTweaksDB.barsStacked`) also anchors bars 2 and 3 
 
 - Raid-style party frames, 72 x 72 squares, in class colors (`raidFramesDisplayClassColor`), with no background.
 - Stacked vertically to the left of the player portrait. The position is worked out from where `PlayerFrame` sits.
-- Custom sort: **tank > healer > dps > you**. Blizzard's role sort places you alphabetically among the dps.
-  - The sort is set with `CompactPartyFrame:SetFlowSortFunction`.
-  - It is re-applied on entering the world, on roster changes and when combat ends, but never in combat.
-- Runs automatically once per character (`ForeverTweaksDB.partyLayout`).
+- Blizzard's **Sort by Role**: tank > healer > dps, and you sit alphabetically among the dps.
+- Written straight into the saved Edit Mode layout (`C_EditMode.SaveLayouts`), then applied with `/reload`.
+- Ran once per account automatically (`ForeverTweaksDB.partyRoleSort`).
+
+**Taint warning.** On Forever, unit frame health values are "secret". Two things taint the secure party frames and cause "attempt to compare ... secret number value ... tainted by ForeverTweaks" errors:
+
+- Opening or closing Edit Mode from addon code (`ShowUIPanel` / `HideUIPanel(EditModeManagerFrame)`).
+- Giving the party frames a custom sort (`CompactPartyFrame:SetFlowSortFunction`).
+
+A "you last" sort is therefore not possible without that error. `/ftlayout` still opens Edit Mode from code, so it can raise the same error now that raid-style party frames are on. A `/reload` clears it.
+
+### Player frame numbers
+
+Health and mana are shown as numbers (`statusText` 1, `statusTextDisplay` NUMERIC). This is set once (`ForeverTweaksDB.statusText`) and can be changed in Options > Interface.
 
 ### One-time setups
 

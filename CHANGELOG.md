@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 - 2026-11-07
+
+- Fixed a Lua error, "secret number value ... tainted by ForeverTweaks", in the party frames:
+  - `/ftparty` now writes the Edit Mode layout directly instead of opening and closing Edit Mode.
+  - Dropped the custom "you last" sort. Blizzard's Sort by Role is used instead.
+- Player frame health and mana are shown as numbers.
+
 ## 1.0.0 - 2026-11-07
 
 - Renamed QuestFilter to **ForeverTweaks**:

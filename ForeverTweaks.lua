@@ -316,74 +316,61 @@ end
 
 
 -- Party frames (2026-11-07): raid-style 72x72 squares in class colors, stacked to the left of the player portrait,
--- ordered tank > healer > dps > you (Blizzard's own role sort puts you alphabetically among the dps).
--- /qfparty re-applies the Edit Mode part; it also runs once per character at login.
-local ROLE_ORDER = { TANK = 1, HEALER = 2, DAMAGER = 3, NONE = 3 }
-local function QFPartySort(a, b)
-  local pa, pb = UnitIsUnit(a, "player"), UnitIsUnit(b, "player")
-  if pa ~= pb then return pb end
-  local ra, rb = ROLE_ORDER[UnitGroupRolesAssigned(a)] or 3, ROLE_ORDER[UnitGroupRolesAssigned(b)] or 3
-  if ra ~= rb then return ra < rb end
-  local na, nb = UnitName(a), UnitName(b)
-  if na and nb then return na < nb end
-  if na or nb then return na ~= nil end
-  return a < b
-end
-local function QFApplyPartySort()
-  if InCombatLockdown() or not CompactPartyFrame or CompactPartyFrame.flowSortFunc == QFPartySort then return end
-  CompactPartyFrame:SetFlowSortFunction(QFPartySort)
-end
-
-local function QFPartyLayout()
-  if InCombatLockdown() then print("ForeverTweaks: leave combat first") return end
-  local M, S = EditModeManagerFrame, Enum.EditModeUnitFrameSetting
-  local function step(label, fn)
-    local ok, err = pcall(fn)
-    print("ForeverTweaks party: " .. label .. (ok and " ok" or (" FAILED: " .. tostring(err))))
-  end
-  SetCVar("raidFramesDisplayClassColor", "1")
-  step("edit mode", function() ShowUIPanel(M) end)
-  step("party frames", function()
-    local f = M:GetRegisteredSystemFrame(Enum.EditModeSystem.UnitFrame, Enum.EditModeUnitFrameSystemIndices.Party)
-    M:OnSystemSettingChange(f, S.UseRaidStylePartyFrames, 1)
-    M:OnSystemSettingChange(f, S.UseHorizontalGroups, 0)
-    M:OnSystemSettingChange(f, S.ShowPartyFrameBackground, 0)
-    M:OnSystemSettingChange(f, S.FrameWidth, 72)
-    M:OnSystemSettingChange(f, S.FrameHeight, 72)
-    if Enum.SortPlayersBy and Enum.SortPlayersBy.Role then M:OnSystemSettingChange(f, S.SortPlayersBy, Enum.SortPlayersBy.Role) end
-    -- Right edge 8 units left of the player frame; a full party's bottom lines up with the player frame's bottom.
-    local k = PlayerFrame:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local x, y = PlayerFrame:GetLeft() * k - 8, PlayerFrame:GetBottom() * k + 5 * 72 + 4
-    f:ClearAllPoints()
-    f:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", x, y)
-    M:OnSystemPositionChange(f)
-  end)
-  step("save", function() M:SaveLayoutChanges() end)
-  step("close edit mode", function() HideUIPanel(M) end)
-  C_Timer.After(0.5, QFApplyPartySort)
-end
+-- Blizzard's "Sort by Role" (tank > healer > dps; you sit alphabetically among the dps).
+-- Written straight into the saved Edit Mode layout (C_EditMode.SaveLayouts) and applied on /reload. Opening or
+-- closing Edit Mode from addon code, or giving the party frames a custom sort, taints the secure party frames on
+-- Forever ("secret number value ... tainted by ForeverTweaks"), so neither is done here.
 SLASH_QFPARTY1 = "/ftparty"
 SLASH_QFPARTY2 = "/qfparty"
-SlashCmdList.QFPARTY = QFPartyLayout
-
-local partyFrames = CreateFrame("Frame")
-partyFrames:RegisterEvent("PLAYER_ENTERING_WORLD")
-partyFrames:RegisterEvent("GROUP_ROSTER_UPDATE")
-partyFrames:RegisterEvent("PLAYER_REGEN_ENABLED")
-partyFrames:SetScript("OnEvent", function(_, event)
-  if event == "PLAYER_ENTERING_WORLD" then
-    C_Timer.After(8, function()
-      local me = UnitName("player") .. "-" .. GetRealmName()
-      ForeverTweaksDB.partyLayout = ForeverTweaksDB.partyLayout or {}
-      if not ForeverTweaksDB.partyLayout[me] and not InCombatLockdown() then
-        QFPartyLayout()
-        ForeverTweaksDB.partyLayout[me] = true
+SlashCmdList.QFPARTY = function()
+  if InCombatLockdown() then print("ForeverTweaks: leave combat first") return end
+  local ok, err = pcall(function()
+    local S, UF, PARTY = Enum.EditModeUnitFrameSetting, Enum.EditModeSystem.UnitFrame, Enum.EditModeUnitFrameSystemIndices.Party
+    local info = C_EditMode.GetLayouts()
+    local presets = EditModePresetLayoutManager and #EditModePresetLayoutManager:GetCopyOfPresetLayouts() or 2
+    local layout = info.layouts[info.activeLayout - presets]
+    if not layout then error("active Edit Mode layout is a preset; copy it to a custom layout first") end
+    local want = {
+      [S.UseRaidStylePartyFrames] = 1, [S.UseHorizontalGroups] = 0, [S.ShowPartyFrameBackground] = 0,
+      [S.FrameWidth] = 72, [S.FrameHeight] = 72, [S.SortPlayersBy] = 0, -- Enum.SortPlayersBy.Role
+    }
+    local k = PlayerFrame:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    local x, y = PlayerFrame:GetLeft() * k - 8, PlayerFrame:GetBottom() * k + 5 * 72 + 4
+    for _, sys in ipairs(layout.systems) do
+      if sys.system == UF and sys.systemIndex == PARTY then
+        sys.isInDefaultPosition = false
+        sys.anchorInfo = { point = "TOPRIGHT", relativeTo = "UIParent", relativePoint = "BOTTOMLEFT", offsetX = x, offsetY = y }
+        for _, s in ipairs(sys.settings) do
+          if want[s.setting] ~= nil then s.value = want[s.setting] want[s.setting] = nil end
+        end
+        for setting, value in pairs(want) do table.insert(sys.settings, { setting = setting, value = value }) end
       end
-      QFApplyPartySort()
-    end)
-  else
-    QFApplyPartySort()
-  end
+    end
+    C_EditMode.SaveLayouts(info)
+  end)
+  SetCVar("raidFramesDisplayClassColor", "1")
+  print("ForeverTweaks party: " .. (ok and "saved, /reload to apply" or ("FAILED: " .. tostring(err))))
+end
+
+-- Once per account: re-save the party layout with Sort by Role (the first version set it through Edit Mode).
+local partyOnce = CreateFrame("Frame")
+partyOnce:RegisterEvent("PLAYER_LOGIN")
+partyOnce:SetScript("OnEvent", function()
+  C_Timer.After(8, function()
+    if ForeverTweaksDB.partyRoleSort or InCombatLockdown() then return end
+    SlashCmdList.QFPARTY()
+    ForeverTweaksDB.partyRoleSort = true
+  end)
+end)
+
+-- Player frame numbers (2026-11-07): health and mana shown as numbers on the player (and target) frame. Once.
+local statusText = CreateFrame("Frame")
+statusText:RegisterEvent("PLAYER_LOGIN")
+statusText:SetScript("OnEvent", function()
+  if ForeverTweaksDB.statusText then return end
+  SetCVar("statusText", "1")
+  SetCVar("statusTextDisplay", "NUMERIC")
+  ForeverTweaksDB.statusText = true
 end)
 
 -- Platynator (2026-11-06): import the Jamestone profile (wago.io/xFmq0meO5, built for WoW Forever) once per character.
